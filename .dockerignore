@@ -1,0 +1,9 @@
+.git
+.idea
+.codex
+admin
+frontend
+node_modules
+target/test-classes
+target/surefire-reports
+*.log
