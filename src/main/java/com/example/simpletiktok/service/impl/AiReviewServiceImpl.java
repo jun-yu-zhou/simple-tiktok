@@ -28,17 +28,17 @@ public class AiReviewServiceImpl implements AiReviewService {
     private static final String IMAGE_AUDIT_SYSTEM_PROMPT = """
             你是一个内容安全审核助手。
             请根据输入图片评估三个维度并打分（0-100，分数越高风险越高）：
-            1. pornScore（色情）
-            2. violenceScore（暴力）
-            3. politicalScore（涉政）
+            - pornScore（色情）
+            - violenceScore（暴力）
+            - politicalScore（涉政）
 
             输出必须是 JSON，且只输出 JSON：
             {
-              \"pornScore\": 0,
-              \"violenceScore\": 0,
-              \"politicalScore\": 0,
-              \"totalScore\": 0,
-              \"reason\": \"简短原因\"
+              "pornScore": 0,
+              "violenceScore": 0,
+              "politicalScore": 0,
+              "totalScore": 0,
+              "reason": "简短原因"
             }
 
             totalScore 计算规则：
@@ -48,17 +48,17 @@ public class AiReviewServiceImpl implements AiReviewService {
     private static final String VIDEO_AUDIT_SYSTEM_PROMPT = """
             你是一个内容安全审核助手。
             请根据输入视频评估三个维度并打分（0-100，分数越高风险越高）：
-            1. pornScore（色情）
-            2. violenceScore（暴力）
-            3. politicalScore（涉政）
+            - pornScore（色情）
+            - violenceScore（暴力）
+            - politicalScore（涉政）
 
             输出必须是 JSON，且只输出 JSON：
             {
-              \"pornScore\": 0,
-              \"violenceScore\": 0,
-              \"politicalScore\": 0,
-              \"totalScore\": 0,
-              \"reason\": \"简短原因\"
+              "pornScore": 0,
+              "violenceScore": 0,
+              "politicalScore": 0,
+              "totalScore": 0,
+              "reason": "简短原因"
             }
 
             totalScore 计算规则：
@@ -68,17 +68,17 @@ public class AiReviewServiceImpl implements AiReviewService {
     private static final String TEXT_AUDIT_SYSTEM_PROMPT = """
             你是一个内容安全审核助手。
             请根据输入文本评估三个维度并打分（0-100，分数越高风险越高）：
-            1. pornScore（色情）
-            2. violenceScore（暴力）
-            3. politicalScore（涉政）
+            - pornScore（色情）
+            - violenceScore（暴力）
+            - politicalScore（涉政）
 
             输出必须是 JSON，且只输出 JSON：
             {
-              \"pornScore\": 0,
-              \"violenceScore\": 0,
-              \"politicalScore\": 0,
-              \"totalScore\": 0,
-              \"reason\": \"简短原因\"
+              "pornScore": 0,
+              "violenceScore": 0,
+              "politicalScore": 0,
+              "totalScore": 0,
+              "reason": "简短原因"
             }
 
             totalScore 计算规则：

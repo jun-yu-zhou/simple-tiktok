@@ -1,9 +1,11 @@
 package com.example.simpletiktok.mq;
 
 import com.example.simpletiktok.config.RabbitMqConfig;
+import com.example.simpletiktok.pojo.dto.TagExpandDecisionDTO;
 import com.example.simpletiktok.pojo.dto.VideoLikeModelMessageDTO;
 import com.example.simpletiktok.pojo.entity.Video;
 import com.example.simpletiktok.service.ILabelService;
+import com.example.simpletiktok.service.ITagExpandJudgeService;
 import com.example.simpletiktok.service.IUserModelService;
 import com.example.simpletiktok.service.IVideoService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class VideoLikeModelConsumer {
 
     private final IVideoService videoService;
     private final ILabelService labelService;
+    private final ITagExpandJudgeService tagExpandJudgeService;
     private final IUserModelService userModelService;
 
     @RabbitListener(bindings = @QueueBinding(
@@ -53,18 +56,43 @@ public class VideoLikeModelConsumer {
         }
 
         Map<String, Double> deltaMap = new LinkedHashMap<>();
+        Map<String, String> baseTagSourceMap = new LinkedHashMap<>();
         Set<String> excludes = new LinkedHashSet<>(labels);
         for (String label : labels) {
             deltaMap.merge(label, BASE_LABEL_SCORE, Double::sum);
+            baseTagSourceMap.put(label, "source_video");
         }
-        // 点赞异步补充一个相似标签，增强兴趣模型扩散能力
+        // 点赞异步补充相似标签；命中一个可接受的召回标签后立即结束
+        boolean recallAccepted = false;
         for (String label : labels) {
+            // 结束
+            if (recallAccepted) {
+                break;
+            }
             String similar = labelService.findOneSimilarLabel(label, excludes);
             if (similar == null || similar.isBlank()) {
                 continue;
             }
-            excludes.add(similar);
-            deltaMap.merge(similar.trim(), SIMILAR_LABEL_SCORE, Double::sum);
+            String similarTag = similar.trim();
+            if (similarTag.isEmpty()) {
+                continue;
+            }
+            excludes.add(similarTag);
+
+            Map<String, String> tagSourceMap = new LinkedHashMap<>(baseTagSourceMap);
+            tagSourceMap.put(similarTag, "source_recall");
+            TagExpandDecisionDTO decision = tagExpandJudgeService.judge(tagSourceMap);
+            if (decision != null && Boolean.TRUE.equals(decision.getAccept())) {
+                deltaMap.merge(similarTag, SIMILAR_LABEL_SCORE, Double::sum);
+                // 找到标签适合写入，结束
+                recallAccepted = true;
+            }
+            log.info("like model tag decision, userId={}, videoId={}, tag={}, accept={}, opinion={}",
+                    message.getUserId(),
+                    message.getVideoId(),
+                    similarTag,
+                    decision != null && Boolean.TRUE.equals(decision.getAccept()),
+                    decision == null ? "" : decision.getOpinion());
         }
         userModelService.applyLabelDelta(message.getUserId(), deltaMap);
         log.info("like model updated, userId={}, videoId={}, labels={}",
