@@ -134,7 +134,3 @@ npm run build
 cd admin
 npm run build
 ```
-
-## 补充说明
-- 部署用 Nginx 目录已忽略：`src/main/resources/nginx/`。
-- 提交 GitHub 前，建议再次检查配置文件默认密码与占位符。
