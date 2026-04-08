@@ -1,0 +1,44 @@
+aliyun:
+  oss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:your access_key_id}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:your access_key_secret}
+    bucket-name: ${ALIYUN_OSS_BUCKET:simple-tiktok}
+    cdn-domain: ${ALIYUN_OSS_CDN_DOMAIN:simple-tiktok.xyz}
+    cdn-scheme: ${ALIYUN_OSS_CDN_SCHEME:http}
+
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        model-name: qwen-vl-max
+        api-key: ${DASHSCOPE_API_KEY:your apiKey}
+      embedding-model:
+        model-name: text-embedding-v4
+        api-key: ${DASHSCOPE_API_KEY:your apiKey}
+
+app:
+  security:
+    referer-whitelist:
+      - http://localhost:5378
+      - http://localhost:8080
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_NAME:your email}
+    password: ${MAIL_PASSWORD:your mailPassword}
+    properties:
+      mail:
+        smtp:
+          ssl:
+            enable: true
+
+  servlet:
+    multipart:
+      max-file-size: 300MB
+      max-request-size: 300MB
