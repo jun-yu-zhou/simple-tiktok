@@ -130,11 +130,13 @@ public class LabelServiceImpl extends ServiceImpl<LabelMapper, Label> implements
             if (embedding == null) {
                 return null;
             }
+            // 检索器，maxResults不能唯一是有可能召回自己
             EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
                     .queryEmbedding(embedding)
                     .maxResults(5)
                     .minScore(0.55)
                     .build();
+            // 召回文档
             EmbeddingSearchResult<TextSegment> result = store.search(request);
             if (result == null || result.matches() == null || result.matches().isEmpty()) {
                 return null;
@@ -143,6 +145,7 @@ public class LabelServiceImpl extends ServiceImpl<LabelMapper, Label> implements
                 if (match == null || match.embeddingId() == null || match.embeddingId().isBlank()) {
                     continue;
                 }
+                // 根据QdrantPointId<->embeddingId搜索标签
                 Label label = this.getOne(
                         Wrappers.<Label>lambdaQuery()
                                 .eq(Label::getQdrantPointId, match.embeddingId())
@@ -157,6 +160,7 @@ public class LabelServiceImpl extends ServiceImpl<LabelMapper, Label> implements
                 if (candidateNorm == null || candidateNorm.equals(norm)) {
                     continue;
                 }
+                // excludes 中的标签统一跳过：包含原始标签及本轮已处理过的召回标签，避免重复扩展
                 if (containsIgnoreBlank(excludes, candidateNorm)) {
                     continue;
                 }

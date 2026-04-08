@@ -50,13 +50,17 @@ public class VideoLikeModelConsumer {
         if (video == null || video.getLabels() == null || video.getLabels().isEmpty()) {
             return;
         }
+        // 视频标签
         List<String> labels = normalizeLabels(video.getLabels());
         if (labels.isEmpty()) {
             return;
         }
 
+        // 存标签-分数
         Map<String, Double> deltaMap = new LinkedHashMap<>();
+        // 存标签-视频/召回
         Map<String, String> baseTagSourceMap = new LinkedHashMap<>();
+        // 存视频标签和每次召回的标签，过滤用
         Set<String> excludes = new LinkedHashSet<>(labels);
         for (String label : labels) {
             deltaMap.merge(label, BASE_LABEL_SCORE, Double::sum);
@@ -69,6 +73,7 @@ public class VideoLikeModelConsumer {
             if (recallAccepted) {
                 break;
             }
+            // 相似度检索一个标签
             String similar = labelService.findOneSimilarLabel(label, excludes);
             if (similar == null || similar.isBlank()) {
                 continue;
@@ -77,12 +82,16 @@ public class VideoLikeModelConsumer {
             if (similarTag.isEmpty()) {
                 continue;
             }
+            // 边界判断通过，写入set，过滤用，避免下次召回同一个标签
             excludes.add(similarTag);
 
+            // 写入视频附带标签
             Map<String, String> tagSourceMap = new LinkedHashMap<>(baseTagSourceMap);
+            // 写入召回标签
             tagSourceMap.put(similarTag, "source_recall");
             TagExpandDecisionDTO decision = tagExpandJudgeService.judge(tagSourceMap);
             if (decision != null && Boolean.TRUE.equals(decision.getAccept())) {
+                // 适合，写入deltaMap参与更新用户兴趣模型
                 deltaMap.merge(similarTag, SIMILAR_LABEL_SCORE, Double::sum);
                 // 找到标签适合写入，结束
                 recallAccepted = true;

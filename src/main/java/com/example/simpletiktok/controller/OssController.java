@@ -50,20 +50,25 @@ public class OssController {
 
     @GetMapping("/url/{objectName}")
     public R<?> getFileUrl(@PathVariable String objectName, HttpServletRequest request) {
+        // 资源链接发放入口：先校验来源，再下发可访问链接。
         String referer = request.getHeader(HttpHeaders.REFERER);
         if (!isRefererAllowed(referer)) {
             return R.error().code(403).message("非法来源，禁止访问资源");
         }
-        return R.ok().data(ossService.getPublicUrl(objectName));
+        // 下发策略：优先 CDN，未配置 CDN 时回退 OSS 公网链接。
+        return R.ok().data(ossService.getAccessUrl(objectName));
     }
 
     private boolean isRefererAllowed(String referer) {
+        // Referer 为空时，是否放行由 allowEmptyReferer 控制。
         if (StrUtil.isBlank(referer)) {
             return securityProperties.isAllowEmptyReferer();
         }
+        // 白名单未配置时默认拒绝，避免“全放开”。
         if (securityProperties.getRefererWhitelist() == null || securityProperties.getRefererWhitelist().isEmpty()) {
             return false;
         }
+        // 先做统一归一化，再执行前缀匹配，保证规则稳定。
         String ref = normalizePrefix(referer);
         for (String allow : securityProperties.getRefererWhitelist()) {
             String prefix = normalizePrefix(allow);
@@ -82,6 +87,7 @@ public class OssController {
         if (StrUtil.isBlank(value)) {
             return "";
         }
+        // 去掉尾部斜杠，避免同域名因 "/" 差异导致误判。
         String text = value.trim();
         while (text.endsWith("/")) {
             text = text.substring(0, text.length() - 1);

@@ -12,7 +12,13 @@ import java.util.List;
 @ConfigurationProperties(prefix = "app.security")
 public class SecurityProperties {
 
+    /**
+     * Referer 白名单前缀列表（例如 http://example.com）。
+     */
     private List<String> refererWhitelist = new ArrayList<>();
 
+    /**
+     * 是否允许空 Referer 请求访问资源链接接口。
+     */
     private boolean allowEmptyReferer = false;
 }

@@ -65,6 +65,22 @@ public class OssServiceImpl implements OssService {
         return "https://" + ossConfig.getBucketName() + "." + cleanEndpoint + "/" + encodedObjectName;
     }
 
+    @Override
+    public String getAccessUrl(String objectName) {
+        if (StrUtil.isBlank(objectName)) {
+            throw new IllegalArgumentException("objectName must not be blank");
+        }
+        String encodedObjectName = encodeObjectName(objectName);
+        String cdnHost = normalizeHost(ossConfig.getCdnDomain());
+        // 未配置 CDN 域名时回退 OSS 公网链接，兼容本地与测试环境。
+        if (StrUtil.isBlank(cdnHost)) {
+            return getPublicUrl(objectName);
+        }
+        // 当前阶段未启用证书，默认使用 http；证书就绪后可切到 https。
+        String scheme = StrUtil.blankToDefault(StrUtil.trim(ossConfig.getCdnScheme()), "http");
+        return scheme + "://" + cdnHost + "/" + encodedObjectName;
+    }
+
     private String buildObjectName(String originalFilename) {
         String ext = FileNameUtil.extName(originalFilename);
         String suffix = StrUtil.isBlank(ext) ? "" : "." + ext;
@@ -75,5 +91,18 @@ public class OssServiceImpl implements OssService {
         return Arrays.stream(StrUtil.trim(objectName).split("/"))
                 .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"))
                 .collect(Collectors.joining("/"));
+    }
+
+    private String normalizeHost(String host) {
+        if (StrUtil.isBlank(host)) {
+            return "";
+        }
+        String value = StrUtil.trim(host);
+        value = StrUtil.removePrefixIgnoreCase(value, "http://");
+        value = StrUtil.removePrefixIgnoreCase(value, "https://");
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value;
     }
 }

@@ -199,6 +199,21 @@ const cleanupObjectUrl = url => {
   }
 };
 
+const resetLocalPreviewState = () => {
+  cleanupObjectUrl(localVideoPreviewUrl.value);
+  cleanupObjectUrl(localCoverPreviewUrl.value);
+  localVideoPreviewUrl.value = '';
+  localCoverPreviewUrl.value = '';
+  previewPlayable.value = false;
+  selectedVideoDurationSeconds.value = null;
+  if (videoFileRef.value) {
+    videoFileRef.value.value = null;
+  }
+  if (coverFileRef.value) {
+    coverFileRef.value.value = null;
+  }
+};
+
 const readVideoDuration = file =>
   new Promise((resolve, reject) => {
     const tempUrl = URL.createObjectURL(file);
@@ -356,11 +371,7 @@ const uploadCover = () => {
 };
 
 const clearUp = () => {
-  cleanupObjectUrl(localVideoPreviewUrl.value);
-  cleanupObjectUrl(localCoverPreviewUrl.value);
-  localVideoPreviewUrl.value = '';
-  localCoverPreviewUrl.value = '';
-  previewPlayable.value = false;
+  resetLocalPreviewState();
   props.clear();
 };
 
@@ -390,6 +401,17 @@ watch(previewVideoUrl, async () => {
   }
 });
 
+watch(
+  () => [media.value?.url, media.value?.cover, media.value?.videoPreviewUrl, media.value?.coverPreviewUrl],
+  values => {
+    const noMedia = values.every(v => !v);
+    // 父组件发布成功后会重置 currentVideo；这里同步清理本地预览缓存，避免视频/封面回显残留。
+    if (noMedia && (localVideoPreviewUrl.value || localCoverPreviewUrl.value)) {
+      resetLocalPreviewState();
+    }
+  }
+);
+
 const coverImg = computed(() => {
   if (localCoverPreviewUrl.value) {
     return localCoverPreviewUrl.value;
@@ -416,8 +438,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  cleanupObjectUrl(localVideoPreviewUrl.value);
-  cleanupObjectUrl(localCoverPreviewUrl.value);
+  resetLocalPreviewState();
 });
 
 const pushVideo = () => {

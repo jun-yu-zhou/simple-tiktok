@@ -16,6 +16,14 @@ public class OssConfig {
     private String accessKeyId;
     private String accessKeySecret;
     private String bucketName;
+    /**
+     * CDN 访问域名（仅域名或 host[:port]）。
+     */
+    private String cdnDomain;
+    /**
+     * CDN 链接协议，当前环境无证书时可使用 http。
+     */
+    private String cdnScheme = "http";
 
     @Bean(destroyMethod = "shutdown")
     public OSS ossClient() {
