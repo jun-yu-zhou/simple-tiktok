@@ -66,14 +66,19 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (userId == null || followId == null) {
             return false;
         }
+        // 删数据库里的关注关系
         boolean removed = this.remove(
                 Wrappers.<Follow>lambdaQuery()
                         .eq(Follow::getUserId, userId)
                         .eq(Follow::getFollowId, followId)
         );
+        // 删除 Redis 中“我的关注列表”里的这条记录
         stringRedisTemplate.opsForZSet().remove(RedisConstants.USER_FOLLOW + userId, String.valueOf(followId));
+        // 删除 Redis 中“对方的粉丝列表”里的这条记录
         stringRedisTemplate.opsForZSet().remove(RedisConstants.USER_FANS + followId, String.valueOf(userId));
+        // 只有数据库删除成功，才继续清理“关注收件箱”中的视频
         if (removed) {
+            // 查询被取关用户发布过的、当前可见的视频ID
             List<Long> videoIds = videoMapper.selectList(
                             Wrappers.<Video>lambdaQuery()
                                     .select(Video::getId)
@@ -84,6 +89,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
                     .stream()
                     .map(Video::getId)
                     .collect(Collectors.toList());
+            // 如果查到了这些视频，就从当前用户的关注流收件箱中移除
             if (!videoIds.isEmpty()) {
                 stringRedisTemplate.opsForZSet().remove(RedisConstants.IN_FOLLOW + userId,
                         videoIds.stream().map(String::valueOf).toArray());

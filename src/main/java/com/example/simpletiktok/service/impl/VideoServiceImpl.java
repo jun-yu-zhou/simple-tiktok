@@ -38,7 +38,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.text.DecimalFormat;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -695,9 +694,18 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         if (userId == null) {
             return Collections.emptyList();
         }
-        // lastTime 为空或非正数时按首屏处理，避免传入 0 导致查空
+        // 判断是否为首屏请求
         boolean firstPage = lastTime == null || lastTime <= 0;
-        long maxScore = firstPage ? System.currentTimeMillis() : lastTime;
+        // 如果是首屏请求，先执行一次关注流收件箱初始化/补拉
+        if (firstPage) {
+            initFollowFeed(userId);
+        }
+        // 计算本次查询的 score 上限
+        // 非首屏时，使用前端传来的 lastTime 作为分页边界
+        long maxScore = firstPage ? Long.MAX_VALUE : lastTime;
+        // 计算分页偏移量
+        // 首屏从第 0 条开始取
+        // 非首屏时 offset = 1，目的是跳过上一页最后一条，避免重复
         long offset = firstPage ? 0 : 1;
         Set<String> ids = stringRedisTemplate.opsForZSet()
                 .reverseRangeByScore(RedisConstants.IN_FOLLOW + userId, 0, maxScore, offset, 20);
@@ -715,6 +723,8 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             return Collections.emptyList();
         }
         List<Video> videos = this.listByIds(videoIds);
+        // 因为 listByIds 查出来的顺序不一定和关注流原始顺序一致，
+        // 所以这里要手动恢复成“按发布时间倒序”的展示顺序
         Map<Long, Video> videoMap = videos.stream().collect(Collectors.toMap(Video::getId, v -> v));
         List<Video> result = new ArrayList<>();
         for (Long id : videoIds) {
@@ -739,23 +749,13 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         // 收件箱
         String inboxKey = RedisConstants.IN_FOLLOW + userId;
         long now = System.currentTimeMillis();
-        // 先确定一个时间范围-只取最近7天的数据
-        long min = Instant.ofEpochMilli(now).minus(7, ChronoUnit.DAYS).toEpochMilli();
-        // 如果 inbox 已经有数据，就用 inbox 里最后一条的时间作为下限
-        Set<ZSetOperations.TypedTuple<String>> inboxLast =
-                stringRedisTemplate.opsForZSet().rangeWithScores(inboxKey, -1, -1);
-        if (inboxLast != null && !inboxLast.isEmpty()) {
-            ZSetOperations.TypedTuple<String> tuple = inboxLast.iterator().next();
-            if (tuple.getScore() != null) {
-                min = tuple.getScore().longValue();
-            }
-        }
-
-        // 从被关注者的 outbox 中，取出 score 在 [min, now] 之间的内容，按时间倒序拿最多 50 条
+        // 每次仅同步最近 7 天，确保新关注作者的近 7 天视频也能完整补齐。
+        long min = Math.max(0L, now - Duration.ofDays(7).toMillis());
+        // 从被关注者的 outbox 中，取出 score 在 [min, now] 之间的内容并写入收件箱。
         for (Long followId : followIds) {
             String outboxKey = RedisConstants.OUT_FOLLOW + followId;
             Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet()
-                    .reverseRangeByScoreWithScores(outboxKey, min, now, 0, 50);
+                    .reverseRangeByScoreWithScores(outboxKey, min, Double.MAX_VALUE);
             if (tuples == null || tuples.isEmpty()) {
                 continue;
             }
@@ -823,7 +823,8 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         }
         // lastTime 为空或非正数时按首屏处理，避免传入 0 导致查空
         boolean firstPage = lastTime == null || lastTime <= 0;
-        long maxScore = firstPage ? System.currentTimeMillis() : lastTime;
+        // 首屏查询不以当前时间做上限，避免时钟/时区差导致新写入 score 大于 now 时被漏查。
+        long maxScore = firstPage ? Long.MAX_VALUE : lastTime;
         long offset = firstPage ? 0 : 1;
         Set<String> ids = stringRedisTemplate.opsForZSet()
                 .reverseRangeByScore(RedisConstants.IN_FRIEND_SHARE + userId, 0, maxScore, offset, 20);

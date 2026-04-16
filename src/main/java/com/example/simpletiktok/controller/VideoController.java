@@ -11,6 +11,7 @@ import com.example.simpletiktok.pojo.vo.FavoriteSelectStateVO;
 import com.example.simpletiktok.pojo.vo.VideoPageVO;
 import com.example.simpletiktok.pojo.vo.VideoVO;
 import com.example.simpletiktok.service.IFavoritesService;
+import com.example.simpletiktok.service.ILabelService;
 import com.example.simpletiktok.service.IVideoService;
 import com.example.simpletiktok.util.R;
 import com.example.simpletiktok.util.RedisConstants;
@@ -37,6 +38,7 @@ public class VideoController {
 
     private final IVideoService videoService;
     private final IFavoritesService favoritesService;
+    private final ILabelService labelService;
     private final VideoVoConverter videoVoConverter;
     private final VideoAuditProducer videoAuditProducer;
 
@@ -77,6 +79,10 @@ public class VideoController {
             // 移入新...
             videoService.pushSystemTypeStockIn(existing);
             videoService.pushSystemStockIn(existing);
+            // 编辑标签后同步触发标签入库与向量化，确保新标签写入 MySQL label 表并进入 Qdrant。
+            if (dto.getLabels() != null && !dto.getLabels().isEmpty()) {
+                labelService.syncAndVectorizeLabels(existing.getLabels());
+            }
             return R.ok().message("修改成功").data(existing.getId());
         }
 
@@ -91,7 +97,11 @@ public class VideoController {
         video.setLikeCount(0L);
         video.setShareCount(0L);
         video.setFavoriteCount(0L);
-        videoService.save(video);
+        // 保存失败时直接返回错误，避免“未写入却提示发布成功”。
+        boolean saved = videoService.save(video);
+        if (!saved) {
+            return R.error().message("发布失败，请重试");
+        }
         videoAuditProducer.send(video);
         return R.ok().message("发布成功").data(video.getId());
     }

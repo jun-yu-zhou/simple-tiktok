@@ -135,6 +135,7 @@ import { reactive, ref } from 'vue';
 import { VOtpInput } from 'vuetify/labs/VOtpInput';
 import { apiAuth, apiCheckCode, apiGetCode } from '../../apis/user/auth';
 import { apiClassifyGetAll, apiClassifySubscribe } from '../../apis/classify';
+import { useUserStore } from '../../stores';
 import buildUtils from '../../utils/buildUtil';
 
 const TEXT = {
@@ -200,6 +201,8 @@ const { showMessage, closeEvent } = defineProps({
 const isLoading = ref(false);
 const captchaImg = ref('');
 const loginToken = ref('');
+const TOKEN_KEY = 'simple-tiktok:token';
+const userStore = useUserStore();
 const categoryOptions = ref([]);
 const selectedTypeIds = ref([]);
 const registerInfo = reactive({
@@ -286,6 +289,11 @@ const setPassword = async () => {
     });
     if (loginRes.data.state && loginRes.data.data?.token) {
       loginToken.value = loginRes.data.data.token;
+      userStore.$patch({
+        token: loginToken.value,
+        info: loginRes.data.data.user || {}
+      });
+      sessionStorage.setItem(TOKEN_KEY, loginToken.value);
       await loadCategoryOptions();
       selectedTypeIds.value = [];
       showMessage(TEXT.registerAndLoginSuccess, 'success');
@@ -320,20 +328,21 @@ const submitCategories = async () => {
     showMessage(TEXT.noInterestSelected, 'warning');
     return;
   }
-  if (!loginToken.value) {
+  const currentToken = loginToken.value || userStore.$state.token || sessionStorage.getItem(TOKEN_KEY);
+  if (!currentToken) {
     showMessage(TEXT.registerSuccessNeedLogin, 'warning');
     return;
   }
   isLoading.value = true;
   try {
-    const { data } = await apiClassifySubscribe(selectedTypeIds.value, loginToken.value);
+    const { data } = await apiClassifySubscribe(selectedTypeIds.value, currentToken);
     if (!data?.state) {
       showMessage(data?.message || TEXT.initInterestFailed, 'error');
       return;
     }
     window.dispatchEvent(new CustomEvent('classify-updated'));
     showMessage(TEXT.registerDone, 'success');
-    closeEvent({ info: {}, token: loginToken.value });
+    closeEvent({ info: {}, token: currentToken });
   } catch {
     showMessage(TEXT.initInterestFailed, 'error');
   } finally {

@@ -5,6 +5,7 @@ import com.example.simpletiktok.pojo.vo.CustomerInfoVO;
 import com.example.simpletiktok.pojo.vo.CustomerRelationPageVO;
 import com.example.simpletiktok.service.IFollowService;
 import com.example.simpletiktok.service.IUserService;
+import com.example.simpletiktok.service.IVideoService;
 import com.example.simpletiktok.util.R;
 import com.example.simpletiktok.util.UserHolder;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class CustomerController {
 
     private final IUserService userService;
     private final IFollowService followService;
+    private final IVideoService videoService;
 
     /**
      * 获取指定用户信息
@@ -75,7 +77,27 @@ public class CustomerController {
         if (!ok) {
             return R.error().message("操作失败");
         }
+        // 关注成功后立即补拉一次关注收件箱，确保新关注关系可以马上看到内容。
+        if (!following) {
+            videoService.initFollowFeed(current.getId());
+        }
         return R.ok().message(following ? "已取关" : "已关注").data(!following);
+    }
+
+    /**
+     * 查询当前登录用户是否已关注目标用户。
+     */
+    @GetMapping("/isFollowing")
+    public R<?> isFollowing(@RequestParam Long targetUserId) {
+        User current = UserHolder.get();
+        if (current == null) {
+            return R.error().message("未登录");
+        }
+        if (targetUserId == null) {
+            return R.error().message("targetUserId 不能为空");
+        }
+        boolean following = followService.isFollowing(current.getId(), targetUserId);
+        return R.ok().data(following);
     }
 
     /**
@@ -118,4 +140,3 @@ public class CustomerController {
         return current == null ? null : current.getId();
     }
 }
-

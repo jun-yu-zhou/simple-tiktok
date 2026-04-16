@@ -19,6 +19,16 @@
         <v-tab value="two3" to="/user/classify" v-if="isSelf">订阅分类</v-tab>
         <v-tab value="4" :to="`/user/like${isSelf ? '' : '?lookId=' + userInfo.id}`">关注/粉丝</v-tab>
         <v-spacer></v-spacer>
+        <v-btn
+          class="ma-2"
+          color="primary"
+          variant="tonal"
+          :loading="followLoading"
+          @click="toggleFollow"
+          v-if="!isSelf"
+        >
+          {{ followedByCurrent ? '取消关注' : '关注' }}
+        </v-btn>
         <v-btn class="ma-2" variant="text" @click="editDialog = !editDialog" v-if="isSelf">编辑信息</v-btn>
       </v-tabs>
     </v-card>
@@ -80,6 +90,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { apiGetFilePublicUrl, apiUploadFile } from '../../apis/file';
+import { apiInitFollowFeed } from '../../apis/video';
+import { apiFollows, apiIsFollowing } from '../../apis/user/like';
 import { apiChangeUserInfo, apiGetUserInfo } from '../../apis/user/user';
 import router from '../../router';
 import { useUserStore } from '../../stores';
@@ -93,6 +105,8 @@ const editDialog = ref(false);
 const avatarFileRef = ref();
 const uploading = ref(-1);
 const avatarRemoteUrl = ref('');
+const followedByCurrent = ref(false);
+const followLoading = ref(false);
 const snackbar = ref({
   show: false,
   text: ''
@@ -169,8 +183,48 @@ const getUserInfo = () => {
   apiGetUserInfo(userStore.$state.lookId).then(({ data }) => {
     if (data.state) {
       userInfo.value = data.data;
+      refreshFollowState();
     }
   });
+};
+
+const refreshFollowState = async () => {
+  const targetId = Number(userInfo.value?.id || 0);
+  if (!targetId || isSelf.value) {
+    followedByCurrent.value = false;
+    return;
+  }
+  try {
+    const { data } = await apiIsFollowing(targetId);
+    if (data?.state) {
+      followedByCurrent.value = Boolean(data.data);
+    }
+  } catch (_e) {}
+};
+
+const toggleFollow = async () => {
+  const targetId = Number(userInfo.value?.id || 0);
+  if (!targetId || isSelf.value || followLoading.value) {
+    return;
+  }
+  followLoading.value = true;
+  try {
+    const { data } = await apiFollows(targetId);
+    snackbar.value = {
+      text: data?.message || '操作完成',
+      show: true,
+      color: data?.state ? 'success' : 'error'
+    };
+    if (!data?.state) {
+      return;
+    }
+    followedByCurrent.value = Boolean(data.data);
+    if (followedByCurrent.value) {
+      await apiInitFollowFeed();
+    }
+  } finally {
+    followLoading.value = false;
+  }
 };
 
 const saveInfo = () => {

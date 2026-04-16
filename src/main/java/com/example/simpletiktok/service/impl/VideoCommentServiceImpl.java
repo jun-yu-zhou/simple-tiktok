@@ -3,6 +3,7 @@ package com.example.simpletiktok.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.simpletiktok.exception.BizException;
 import com.example.simpletiktok.mapper.VideoCommentMapper;
 import com.example.simpletiktok.pojo.dto.VideoCommentSaveDTO;
 import com.example.simpletiktok.pojo.entity.User;
@@ -45,9 +46,9 @@ public class VideoCommentServiceImpl extends ServiceImpl<VideoCommentMapper, Vid
             return false;
         }
 
-        // 评论入库前先做本地敏感词审核，未通过直接返回 false
+        // 评论入库前先做本地敏感词审核，命中违禁词直接返回明确错误信息。
         if (!commentGuardrail.isSafe(dto.getContent())) {
-            return false;
+            throw new BizException("言论包含违禁词，发布失败！");
         }
 
         Long rootId = dto.getRootId() == null ? 0L : dto.getRootId();

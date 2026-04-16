@@ -57,6 +57,7 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { apiGetFilePublicUrl } from '../../../apis/file';
+import { apiInitFollowFeed } from '../../../apis/video';
 import { apiFollows, apiGetLike } from '../../../apis/user/like';
 import { apiGetUserInfo } from '../../../apis/user/user';
 import { useUserStore } from '../../../stores';
@@ -163,6 +164,10 @@ const unLikeOrLike = async id => {
   };
   if (!data?.state) {
     return;
+  }
+  // 关注成功后补拉一次关注收件箱，避免“关注的人”页读不到新内容。
+  if (data?.data === true) {
+    await apiInitFollowFeed();
   }
   await getLike();
 };

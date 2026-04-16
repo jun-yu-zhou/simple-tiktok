@@ -22,3 +22,11 @@ export const apiFollows = followsUserId => {
     }
   });
 };
+
+export const apiIsFollowing = targetUserId => {
+  return request.get('/customer/isFollowing', {
+    params: {
+      targetUserId
+    }
+  });
+};
