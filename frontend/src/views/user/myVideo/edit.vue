@@ -1,6 +1,14 @@
 <template>
   <div>
-    <v-row>
+    <v-alert
+      v-if="isEditMode"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+      text="编辑模式仅支持修改视频分类和标签，视频内容、封面、文案保持不变。"
+    />
+
+    <v-row v-if="!isEditMode">
       <v-col cols="12" md="8">
         <v-card class="preview-card mb-4" variant="outlined" @click="openVideoUpload">
           <v-card-title class="d-flex align-center ga-2">
@@ -58,7 +66,7 @@
       </v-col>
     </v-row>
 
-    <v-text-field variant="filled" label="视频文案" v-model="media.caption" clearable></v-text-field>
+    <v-text-field v-if="!isEditMode" variant="filled" label="视频文案" v-model="media.caption" clearable></v-text-field>
 
     <v-autocomplete
       v-model="media.typeId"
@@ -138,6 +146,7 @@ const props = defineProps({
 });
 
 const media = toRef(props, 'currentVideo');
+const isEditMode = computed(() => !!media.value?.id);
 const videoFileRef = ref(null);
 const coverFileRef = ref(null);
 const videoPreviewRef = ref(null);
@@ -425,7 +434,7 @@ const coverImg = computed(() => {
   return apiFileGet(media.value.cover);
 });
 
-const submitButtonText = computed(() => (media.value?.id ? '保存修改' : '发布视频'));
+const submitButtonText = computed(() => (isEditMode.value ? '保存分类与标签' : '发布视频'));
 
 onMounted(() => {
   apiClassifyGetAll().then(({ data }) => {

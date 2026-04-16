@@ -59,16 +59,28 @@ public class VideoController {
             if (!current.getId().equals(existing.getUserId())) {
                 throw new BizException("无权修改该视频");
             }
-            applySaveDto(existing, dto);
-            existing.setAuditStatus(0);
-            existing.setMsg(null);
-            // 落库
-            videoService.updateById(existing);
-            // 重新审核
-            videoAuditProducer.send(existing);
+            if (!Integer.valueOf(1).equals(existing.getAuditStatus())) {
+                throw new BizException("仅审核通过的视频支持修改分类和标签");
+            }
+            // 先保留旧快照：用于把旧标签/旧分类索引从Redis库存中移除。
+            Video oldVideo = BeanUtil.copyProperties(existing, Video.class);
+            // 编辑模式仅允许修改分类和标签，不允许改视频主体内容。
+            applyEditMetaDto(existing, dto);
+            boolean updated = videoService.updateById(existing);
+            if (!updated) {
+                throw new BizException("修改失败，请重试");
+            }
+            // 视频主体不变，无需重审；仅迁移分类库存和标签库存中的视频ID。
+            // 从旧分类库、旧标签库移出
+            videoService.deleteSystemTypeStockIn(oldVideo);
+            videoService.deleteSystemStockIn(oldVideo);
+            // 移入新...
+            videoService.pushSystemTypeStockIn(existing);
+            videoService.pushSystemStockIn(existing);
             return R.ok().message("修改成功").data(existing.getId());
         }
 
+        // 发布视频
         Video video = BeanUtil.copyProperties(dto, Video.class);
         video.setUserId(current.getId());
         if (video.getOpen() == null) {
@@ -84,24 +96,10 @@ public class VideoController {
         return R.ok().message("发布成功").data(video.getId());
     }
 
-    private void applySaveDto(Video target, VideoSaveDTO dto) {
-        if (dto.getCaption() != null) {
-            target.setCaption(dto.getCaption());
-        }
-        if (dto.getVideoFileName() != null) {
-            target.setVideoFileName(dto.getVideoFileName());
-        }
-        if (dto.getCoverFileName() != null) {
-            target.setCoverFileName(dto.getCoverFileName());
-        }
+    // 编辑场景只接收分类与标签，其他主体字段即使传入也忽略。
+    private void applyEditMetaDto(Video target, VideoSaveDTO dto) {
         if (dto.getLabels() != null) {
             target.setLabels(dto.getLabels());
-        }
-        if (dto.getOpen() != null) {
-            target.setOpen(dto.getOpen());
-        }
-        if (dto.getDuration() != null) {
-            target.setDuration(dto.getDuration());
         }
         if (dto.getTypeId() != null) {
             target.setTypeId(dto.getTypeId());

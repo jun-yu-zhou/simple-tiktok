@@ -67,5 +67,10 @@ public interface IVideoService extends IService<Video> {
 
     void deleteSystemTypeStockIn(Video video);
 
+    /**
+     * 下线视频在 Redis 中的线上索引（标签、分类、关注流、分享流）。
+     */
+    void removeVideoOnlineIndexes(Video video);
+
     boolean deleteVideo(Long videoId, Long userId);
 }

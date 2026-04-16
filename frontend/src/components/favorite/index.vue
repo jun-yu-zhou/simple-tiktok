@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="dialog" scrollable :width="300">
-        <template v-slot:activator="{ props }">
-            <slot :props="props"></slot>
+        <template v-slot:activator="{ props: activatorProps }">
+            <slot :props="{ ...activatorProps, onClick: onActivatorClick }"></slot>
         </template>
         <v-card>
             <v-card-title>选择收藏夹
@@ -40,9 +40,11 @@
 import { computed, ref, watch } from 'vue';
 import { apiFavoriteVideo, apiGetFavoriteStates, apiGetFavorites } from '../../apis/user/favorites';
 import FavoriteEdit from './edit.vue';
+import { useUserStore } from '../../stores';
 const dialog = ref(false)
 const dialogm1 = ref(0)
 const favoriteItems = ref([])
+const userStore = useUserStore()
 const props = defineProps({
     videoId: {
         type: Number,
@@ -89,6 +91,17 @@ const getFavorites = () => {
         setDefaultFavorite()
     })
 }
+
+const onActivatorClick = (event) => {
+    if (!userStore.token) {
+        event?.stopPropagation?.()
+        event?.preventDefault?.()
+        props.callback('未登录')
+        return
+    }
+    dialog.value = true
+}
+
 watch(dialog, (newV) => {
     if (newV) {
         getFavorites()

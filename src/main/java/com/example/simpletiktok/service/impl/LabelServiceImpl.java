@@ -95,6 +95,7 @@ public class LabelServiceImpl extends ServiceImpl<LabelMapper, Label> implements
 
                 // Qdrant pointId使用UUID字符串
                 String pointId = UUID.randomUUID().toString();
+                // 写入向量数据库
                 store.addAll(
                         List.of(pointId),
                         List.of(embedding),

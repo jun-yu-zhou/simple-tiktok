@@ -29,8 +29,8 @@ public class TagExpandJudgeServiceImpl implements ITagExpandJudgeService {
             若语义相关且不偏题则 accept=true，若语义弱相关、过泛或噪声则 accept=false。
             输出必须严格为 JSON 且仅输出 JSON，结构如下：
             {
-              "opinion": "string",
-              "accept": true
+              "opinion": "对判定理由的简要说明",
+              "accept": boolean
             }
             """;
 

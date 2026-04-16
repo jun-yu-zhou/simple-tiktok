@@ -67,10 +67,11 @@ public class CustomerController {
             return R.error().message("不能关注自己");
         }
 
+        // 关注/取关
         boolean following = followService.isFollowing(current.getId(), followsUserId);
         boolean ok = following
-                ? followService.unfollow(current.getId(), followsUserId)
-                : followService.follow(current.getId(), followsUserId);
+                ? followService.unfollow(current.getId(), followsUserId) // 取关
+                : followService.follow(current.getId(), followsUserId); // 关注
         if (!ok) {
             return R.error().message("操作失败");
         }

@@ -33,21 +33,27 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if (!existsActiveUser(userId) || !existsActiveUser(followId)) {
             return false;
         }
+        // 查数据库
         boolean exists = this.exists(
                 Wrappers.<Follow>lambdaQuery()
                         .eq(Follow::getUserId, userId)
                         .eq(Follow::getFollowId, followId)
         );
         long now = System.currentTimeMillis();
+        // 存在关注关系，补充redis
         if (exists) {
             stringRedisTemplate.opsForZSet().add(RedisConstants.USER_FOLLOW + userId, String.valueOf(followId), now);
             stringRedisTemplate.opsForZSet().add(RedisConstants.USER_FANS + followId, String.valueOf(userId), now);
             return true;
         }
+
+        // 正常逻辑
         Follow follow = new Follow();
         follow.setUserId(userId);
         follow.setFollowId(followId);
+        // 写数据库
         boolean ok = this.save(follow);
+        // 双写redis
         if (ok) {
             stringRedisTemplate.opsForZSet().add(RedisConstants.USER_FOLLOW + userId, String.valueOf(followId), now);
             stringRedisTemplate.opsForZSet().add(RedisConstants.USER_FANS + followId, String.valueOf(userId), now);

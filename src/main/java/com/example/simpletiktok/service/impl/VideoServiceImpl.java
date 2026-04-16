@@ -24,11 +24,15 @@ import org.redisson.api.RBloomFilter;
 import org.redisson.api.RedissonClient;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -254,7 +258,8 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         if (videoIds.isEmpty()) {
             return Collections.emptyList();
         }
-        return this.listByIds(videoIds);
+        // 收藏关系保留用户行为数据，只在查询时过滤“公开且审核通过”的视频。
+        return listOpenAuditVideosByOrderedIds(videoIds, videoIds.size());
     }
 
     @Override
@@ -426,6 +431,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         long end = start + pageSize - 1;
 
         String historyKey = RedisConstants.USER_HISTORY_VIDEO + userId;
+        // 获取redisd浏览记录的key
         Set<ZSetOperations.TypedTuple<String>> tuples =
                 stringRedisTemplate.opsForZSet().reverseRangeWithScores(historyKey, start, end);
         if (tuples == null || tuples.isEmpty()) {
@@ -445,8 +451,10 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             } catch (NumberFormatException e) {
                 continue;
             }
+            // 用于查询的视频ID集合
             orderedVideoIds.add(videoId);
             if (tuple.getScore() != null) {
+                // 视频ID<->时间戳
                 scoreMap.put(videoId, tuple.getScore().longValue());
             }
         }
@@ -454,7 +462,14 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             return result;
         }
 
-        List<Video> videos = this.listByIds(new LinkedHashSet<>(orderedVideoIds));
+        // 历史记录保留原始浏览行为；展示时仅返回公开且审核通过的视频。
+        List<Video> videos = this.list(
+                Wrappers.<Video>lambdaQuery()
+                        .in(Video::getId, new LinkedHashSet<>(orderedVideoIds))
+                        .eq(Video::getOpen, 1)
+                        .eq(Video::getAuditStatus, 1)
+        );
+        // 视频ID<->实体
         Map<Long, Video> videoMap = videos.stream().collect(Collectors.toMap(Video::getId, v -> v));
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -463,9 +478,15 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             if (video == null) {
                 continue;
             }
+            // 获取当前视频对应的浏览时间戳，若不存在则使用当前系统时间兜底
             long ts = scoreMap.getOrDefault(videoId, System.currentTimeMillis());
+            // 将毫秒时间戳按系统时区转换为日期，用于按天分组
+            // Instant.ofEpochMilli(ts)把毫秒时间戳转成一个时间点对象 Instant,1744680000000->2025-04-15T10:00:00Z
+            // .atZone(ZoneId.systemDefault())给这个时间点套上系统时区
             LocalDate date = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate();
+            // 格式化
             String key = formatter.format(date);
+            // 最终格式日期<->视频列表
             result.computeIfAbsent(key, k -> new ArrayList<>()).add(video);
         }
         return result;
@@ -710,13 +731,17 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         if (userId == null) {
             return;
         }
+        // 当前用户关注的人
         List<Long> followIds = followService.listFollowingIds(userId);
         if (followIds == null || followIds.isEmpty()) {
             return;
         }
+        // 收件箱
         String inboxKey = RedisConstants.IN_FOLLOW + userId;
         long now = System.currentTimeMillis();
+        // 先确定一个时间范围-只取最近7天的数据
         long min = Instant.ofEpochMilli(now).minus(7, ChronoUnit.DAYS).toEpochMilli();
+        // 如果 inbox 已经有数据，就用 inbox 里最后一条的时间作为下限
         Set<ZSetOperations.TypedTuple<String>> inboxLast =
                 stringRedisTemplate.opsForZSet().rangeWithScores(inboxKey, -1, -1);
         if (inboxLast != null && !inboxLast.isEmpty()) {
@@ -726,6 +751,7 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             }
         }
 
+        // 从被关注者的 outbox 中，取出 score 在 [min, now] 之间的内容，按时间倒序拿最多 50 条
         for (Long followId : followIds) {
             String outboxKey = RedisConstants.OUT_FOLLOW + followId;
             Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet()
@@ -878,6 +904,57 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
     }
 
     @Override
+    public void removeVideoOnlineIndexes(Video video) {
+        if (video == null || video.getId() == null) {
+            return;
+        }
+        // 视频进入重审或被删除后，需要先把线上可见索引摘掉，避免旧内容继续被命中。
+        List<Long> fans = video.getUserId() == null ? Collections.emptyList() : followService.listFansIds(video.getUserId());
+        // 删除发件箱和粉丝收件箱内的视频ID
+        deleteOutBoxFeed(video.getUserId(), fans, video.getId());
+        // 删除标签库内的视频ID
+        deleteSystemStockIn(video);
+        // 删除...分类库...
+        deleteSystemTypeStockIn(video);
+        // 删除热门视频、排行榜...
+        removeHotCache(video.getId());
+        // 删除视频是最终下线，分享收件箱中也必须清理该视频ID，保证“已删除内容不可见”。
+        deleteFriendShareInboxByVideoId(video.getId());
+    }
+
+    private void deleteFriendShareInboxByVideoId(Long videoId) {
+        if (videoId == null) {
+            return;
+        }
+        // 不新增Redis反向索引，使用SCAN分批遍历分享收件箱并移除目标视频ID，避免KEYS阻塞实例。
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(RedisConstants.IN_FRIEND_SHARE + "*")
+                .count(200)
+                .build();
+        List<String> inboxKeys = stringRedisTemplate.execute((RedisConnection connection) -> {
+            List<String> keys = new ArrayList<>();
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            } catch (Exception e) {
+                log.warn("scan friend share inbox failed, videoId={}", videoId, e);
+            }
+            return keys;
+        });
+        if (inboxKeys == null || inboxKeys.isEmpty()) {
+            return;
+        }
+        String member = String.valueOf(videoId);
+        for (String inboxKey : inboxKeys) {
+            if (inboxKey == null || inboxKey.isBlank()) {
+                continue;
+            }
+            stringRedisTemplate.opsForZSet().remove(inboxKey, member);
+        }
+    }
+
+    @Override
     public void pushSystemStockIn(Video video) {
         if (video == null || video.getId() == null || video.getLabels() == null || video.getLabels().isEmpty()) {
             return;
@@ -946,17 +1023,8 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
         }
         boolean removed = this.removeById(videoId);
         if (removed) {
-            List<Long> fans = followService.listFansIds(userId);
-            deleteOutBoxFeed(userId, fans, videoId);
-            deleteSystemStockIn(video);
-            deleteSystemTypeStockIn(video);
-            stringRedisTemplate.opsForZSet().remove(RedisConstants.HOT_RANK, String.valueOf(videoId));
-            // 删除视频后，同步清理近三天热门集合中的残留 ID
-            Calendar calendar = Calendar.getInstance();
-            int today = calendar.get(Calendar.DATE);
-            stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + today, String.valueOf(videoId));
-            stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + (today - 1), String.valueOf(videoId));
-            stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + (today - 2), String.valueOf(videoId));
+            // 删除是最终下线，标签/分类/关注流/分享流都要移除该视频ID，避免残留脏数据。
+            removeVideoOnlineIndexes(video);
         }
         return removed;
     }
@@ -982,6 +1050,20 @@ public class VideoServiceImpl extends ServiceImpl<VideoMapper, Video> implements
             return;
         }
         target.addAll(values);
+    }
+
+    private void removeHotCache(Long videoId) {
+        if (videoId == null) {
+            return;
+        }
+        String member = String.valueOf(videoId);
+        stringRedisTemplate.opsForZSet().remove(RedisConstants.HOT_RANK, member);
+        // 热榜按近三天集合抽样，视频下线时同步清理，避免未审核内容继续被抽到。
+        Calendar calendar = Calendar.getInstance();
+        int today = calendar.get(Calendar.DATE);
+        stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + today, member);
+        stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + (today - 1), member);
+        stringRedisTemplate.opsForSet().remove(RedisConstants.HOT_VIDEO + (today - 2), member);
     }
 
     private List<Long> listVideoIdsByUserModel(Long userId) {

@@ -93,7 +93,7 @@
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text" @click="clear" />
         </v-card-title>
-        <v-card-subtitle class="video-edit-subtitle">保留作品 ID，仅更新当前稿件内容</v-card-subtitle>
+        <v-card-subtitle class="video-edit-subtitle">仅可修改分类与标签，视频内容、封面、文案保持不变</v-card-subtitle>
         <v-divider />
         <v-card-text class="video-edit-body">
           <VideoEdit :current-video="videoInfo" :clear="clear" :save="saveEdit" />

@@ -60,9 +60,12 @@ VideoAuditConsumer {
                         .atZone(java.time.ZoneId.systemDefault())
                         .toInstant()
                         .toEpochMilli();
+                // 写入发件箱
                 videoService.pushOutBoxFeed(dbVideo.getUserId(), dbVideo.getId(), createdTime);
             }
+            // 写入标签库
             videoService.pushSystemStockIn(dbVideo);
+            // 写入分类库
             videoService.pushSystemTypeStockIn(dbVideo);
             // 审核通过后直接处理标签：去重入库 + 向量化写入 Qdrant
             labelService.syncAndVectorizeLabels(dbVideo.getLabels());

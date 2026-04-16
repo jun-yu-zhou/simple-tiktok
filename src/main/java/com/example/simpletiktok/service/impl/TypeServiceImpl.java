@@ -34,6 +34,7 @@ public class TypeServiceImpl extends ServiceImpl<TypeMapper, Type> implements IT
     public boolean save(Type entity) {
         boolean ok = super.save(entity);
         if (ok) {
+            // 发送消息
             sendTypeLabelsForSync(entity == null ? null : entity.getLabelNames());
         }
         return ok;

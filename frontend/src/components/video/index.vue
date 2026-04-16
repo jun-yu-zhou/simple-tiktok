@@ -1234,7 +1234,7 @@ const favoriteCallBack = (e) => {
     } else {
       currentVideo.value.favoritesCount = Number(currentVideo.value.favoritesCount || 0) + 1
     }
-  } else {
+  } else if (e == "移出" || e == "取消收藏") {
     if (typeof currentVideo.value.favoriteCount === 'number') {
       currentVideo.value.favoriteCount = Math.max(0, Number(currentVideo.value.favoriteCount || 0) - 1)
     } else {
@@ -1243,7 +1243,8 @@ const favoriteCallBack = (e) => {
   }
   snackbar.value = {
     show: true,
-    text: e
+    text: e,
+    color: e === "未登录" ? "error" : undefined
   }
 }
 const isAddHistory = ref(true)

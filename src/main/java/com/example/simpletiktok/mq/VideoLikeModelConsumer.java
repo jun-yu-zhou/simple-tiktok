@@ -85,7 +85,7 @@ public class VideoLikeModelConsumer {
             // 边界判断通过，写入set，过滤用，避免下次召回同一个标签
             excludes.add(similarTag);
 
-            // 写入视频附带标签
+            // 写入视频附带标签，
             Map<String, String> tagSourceMap = new LinkedHashMap<>(baseTagSourceMap);
             // 写入召回标签
             tagSourceMap.put(similarTag, "source_recall");
