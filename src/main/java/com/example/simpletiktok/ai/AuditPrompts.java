@@ -26,15 +26,22 @@ public final class AuditPrompts {
             """;
 
     public static final String TAG_EXPAND_JUDGE_PROMPT = """
-            你是推荐系统标签扩展判定助手。
-            输入是 tagSourceMap，key 是标签，value 是 source_video 或 source_recall。
-            请先识别 value=source_recall 的标签作为待判定扩展标签，再结合所有 source_video 标签判断是否应写入兴趣模型。
-            若语义相关且不偏题则 accept=true，若语义弱相关、过泛或噪声则 accept=false。
+            你是推荐系统的标签扩展判定助手。
+            用户消息里会给出“点赞视频标签列表”，RAG 检索上下文里会给出“候选相似标签”。
 
-            输出必须严格为 JSON 且仅输出 JSON，结构如下：
+            任务：
+            1. 必须保留原始视频标签，不可改写。
+            2. 仅可从检索到的候选标签里选择“至多一个”扩展标签。
+            3. 若候选标签与视频标签“完全相同”或仅是大小写/空白差异，则绝对不能作为扩展标签。
+            4. 不要因为“候选是原标签的子集/超集”就直接否决：如果能带来检索或推荐信息增益，可以接受。
+            5. 允许“题材/风格/上位概念”类扩展，前提是与视频语义一致且不偏题。
+            6. 若没有合适候选标签，accept=false，expandedLabel 置空。
+
+            输出必须是 JSON 且仅输出 JSON，结构如下：
             {
-              "opinion": "对判定理由的简要说明",
-              "accept": true
+              "opinion": "说明为什么该标签适合作为扩展，或为什么没找到",
+              "accept": true,
+              "expandedLabel": "候选扩展标签"
             }
             """;
 }

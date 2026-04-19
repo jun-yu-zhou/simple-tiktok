@@ -1,16 +1,16 @@
 package com.example.simpletiktok.service;
 
-import com.example.simpletiktok.pojo.dto.TagExpandDecisionDTO;
+import com.example.simpletiktok.pojo.vo.TagExpandResultVO;
 
-import java.util.Map;
+import java.util.List;
 
 public interface ITagExpandJudgeService {
 
     /**
-     * 对单个召回标签做扩展判定。
+     * 执行一轮标签扩展判定，返回可直接用于兴趣模型更新的结果。
      *
-     * @param tagSourceMap 标签来源映射（key=标签，value=source_video/source_recall）
-     * @return 判定结果（accept=true 才允许写入兴趣模型）
+     * @param videoLabels 点赞视频标签列表（调用方已做基础清洗）
+     * @return 包含标签权重映射与判定说明的结果对象
      */
-    TagExpandDecisionDTO judge(Map<String, String> tagSourceMap);
+    TagExpandResultVO judge(List<String> videoLabels);
 }

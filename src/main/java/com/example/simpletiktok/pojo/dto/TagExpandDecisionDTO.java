@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 召回标签判定结果。
+ * 标签扩展的模型判定结果。
  */
 @Data
 @NoArgsConstructor
@@ -13,12 +13,17 @@ import lombok.NoArgsConstructor;
 public class TagExpandDecisionDTO {
 
     /**
-     * 模型给出的简短意见。
+     * 模型给出的判定说明。
      */
     private String opinion;
 
     /**
-     * true: 允许写入召回标签；false: 跳过该召回标签。
+     * 是否允许将扩展标签写入用户兴趣模型。
      */
     private Boolean accept;
+
+    /**
+     * 模型选出的候选扩展标签；为空表示没有可用候选。
+     */
+    private String expandedLabel;
 }

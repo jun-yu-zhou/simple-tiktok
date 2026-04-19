@@ -1,10 +1,9 @@
 package com.example.simpletiktok.mq;
 
 import com.example.simpletiktok.config.RabbitMqConfig;
-import com.example.simpletiktok.pojo.dto.TagExpandDecisionDTO;
 import com.example.simpletiktok.pojo.dto.VideoLikeModelMessageDTO;
 import com.example.simpletiktok.pojo.entity.Video;
-import com.example.simpletiktok.service.ILabelService;
+import com.example.simpletiktok.pojo.vo.TagExpandResultVO;
 import com.example.simpletiktok.service.ITagExpandJudgeService;
 import com.example.simpletiktok.service.IUserModelService;
 import com.example.simpletiktok.service.IVideoService;
@@ -18,10 +17,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -29,11 +26,7 @@ import java.util.Set;
 @Slf4j
 public class VideoLikeModelConsumer {
 
-    private static final double BASE_LABEL_SCORE = 1D;
-    private static final double SIMILAR_LABEL_SCORE = 0.4D;
-
     private final IVideoService videoService;
-    private final ILabelService labelService;
     private final ITagExpandJudgeService tagExpandJudgeService;
     private final IUserModelService userModelService;
 
@@ -50,64 +43,31 @@ public class VideoLikeModelConsumer {
         if (video == null || video.getLabels() == null || video.getLabels().isEmpty()) {
             return;
         }
-        // 视频标签
+
         List<String> labels = normalizeLabels(video.getLabels());
         if (labels.isEmpty()) {
             return;
         }
 
-        // 存标签-分数
-        Map<String, Double> deltaMap = new LinkedHashMap<>();
-        // 存标签-视频/召回
-        Map<String, String> baseTagSourceMap = new LinkedHashMap<>();
-        // 存视频标签和每次召回的标签，过滤用
-        Set<String> excludes = new LinkedHashSet<>(labels);
-        for (String label : labels) {
-            deltaMap.merge(label, BASE_LABEL_SCORE, Double::sum);
-            baseTagSourceMap.put(label, "source_video");
+        // 尝试获取进行调整的标签结果，输入点赞视频的标签集合
+        TagExpandResultVO result = tagExpandJudgeService.judge(labels);
+        if (result == null || result.getLabelScoreMap() == null || result.getLabelScoreMap().isEmpty()) {
+            return;
         }
-        // 点赞异步补充相似标签；命中一个可接受的召回标签后立即结束
-        boolean recallAccepted = false;
-        for (String label : labels) {
-            // 结束
-            if (recallAccepted) {
-                break;
-            }
-            // 相似度检索一个标签
-            String similar = labelService.findOneSimilarLabel(label, excludes);
-            if (similar == null || similar.isBlank()) {
-                continue;
-            }
-            String similarTag = similar.trim();
-            if (similarTag.isEmpty()) {
-                continue;
-            }
-            // 边界判断通过，写入set，过滤用，避免下次召回同一个标签
-            excludes.add(similarTag);
-
-            // 写入视频附带标签，
-            Map<String, String> tagSourceMap = new LinkedHashMap<>(baseTagSourceMap);
-            // 写入召回标签
-            tagSourceMap.put(similarTag, "source_recall");
-            TagExpandDecisionDTO decision = tagExpandJudgeService.judge(tagSourceMap);
-            if (decision != null && Boolean.TRUE.equals(decision.getAccept())) {
-                // 适合，写入deltaMap参与更新用户兴趣模型
-                deltaMap.merge(similarTag, SIMILAR_LABEL_SCORE, Double::sum);
-                // 找到标签适合写入，结束
-                recallAccepted = true;
-            }
-            log.info("like model tag decision, userId={}, videoId={}, tag={}, accept={}, opinion={}",
-                    message.getUserId(),
-                    message.getVideoId(),
-                    similarTag,
-                    decision != null && Boolean.TRUE.equals(decision.getAccept()),
-                    decision == null ? "" : decision.getOpinion());
-        }
-        userModelService.applyLabelDelta(message.getUserId(), deltaMap);
-        log.info("like model updated, userId={}, videoId={}, labels={}",
-                message.getUserId(), message.getVideoId(), deltaMap.keySet());
+        // 落入redis的用户兴趣模型
+        userModelService.applyLabelDelta(message.getUserId(), result.getLabelScoreMap());
+        log.info(
+                "like model updated, userId={}, videoId={}, expandedAccepted={}, expandedLabel={}, opinion={}, labels={}",
+                message.getUserId(),
+                message.getVideoId(),
+                Boolean.TRUE.equals(result.getExpandedAccepted()),
+                result.getExpandedLabel(),
+                result.getOpinion(),
+                result.getLabelScoreMap().keySet()
+        );
     }
 
+    // 清洗、去重
     private List<String> normalizeLabels(List<String> labels) {
         Set<String> set = new LinkedHashSet<>();
         for (String label : labels) {
